@@ -24,53 +24,36 @@
 // THE SOFTWARE.
 //
 
-var MatrixView = Class.create()
+var MatrixView = new Class({
+	
+	Implements: [Events, Options],
+	
+/*
+  	// The Attached Element
+	element: null,
 
-MatrixView.prototype = {
+	// Handlers
+	selectHandler: null,
+	deselectHandler: null,
+	openHandler: null,
+	deleteHandler: null,
 
-  // The Attached Element
-  element: null,
+	// Selected Items
+	selectedItems: null,
+*/
+	initialize: function(element, options){		
+    	this.selectedItems   = [];
+    	this.element = document.id(element);
+		this.selectionArea = new Element('div', {'class': 'selectionArea'}).inject(this.element);
 
-  // Handlers
-  selectHandler: null,
-  deselectHandler: null,
-  openHandler: null,
-  deleteHandler: null,
-
-  // Selected Items
-  selectedItems: null,
-
-  initialize: function(element, params)
-  {
-
-    this.selectHandler   = params['selectHandler']
-    this.deselectHandler = params['deselectHandler']
-    this.openHandler     = params['openHandler']
-    this.deleteHandler   = params['deleteHandler']
-    this.selectedItems   = new Array()
-    this.element         = element
-
-    window.matrixView    = this
-
-    // Add selection overlay to the view
-    element.insert('<div id="selectionArea" style="display: none"></div>')
-
-    // Observe keys
-    Event.observe(document, 'keypress',
-      function(event)
-      {
-
-        // Meta/Control
-        if (event.metaKey)
-        {
-          if (event.keyCode == 97 || event.keyCode == 65) // Shift-A (Select All)
-          {
-            window.matrixView.selectAll()
-            event.stop()
-            return false
-          }
-          return
-        }
+    	// Observe keys
+    	document.addEvent('keypress', function(event) {
+        	// Meta/Control
+			if (event.meta && (event.keyCode == 97 || event.keyCode == 65)){
+				window.matrixView.selectAll();
+				event.stop();
+				return false;
+			};
 
         // Shift
         else if (event.shiftKey)
@@ -119,21 +102,17 @@ MatrixView.prototype = {
             window.matrixView.moveRight(event)
         }
       }
-    )
+    );
 
-    // Double Click
-    Event.observe(element, 'dblclick',
-      function(event) {
-        element = Event.element(event)
-        if (element.tagName != 'LI') element = element.up('li')
-        if (element)
-        {
-          window.matrixView.deselectAll()
-          window.matrixView.open(element)
-        }
-        event.preventDefault()
-      }
-    )
+	this.element.addEvent('dblclick', function(event) {
+		event.preventDefault();
+		var target = document.id(event.target);
+		var element = target.getAncestor('li');
+		if (element) {
+			this.deselectAll();
+			this.open(element);
+		}
+	}.bind(this));
 
     // Click / Mouse Down
     Event.observe(element, 'mousedown',
@@ -248,52 +227,43 @@ MatrixView.prototype = {
 
   },
 
-  deselectAll: function() {
-    this.element.getElementsBySelector('li.selected').invoke('removeClassName', 'selected')
-    this.selectedItems.clear()
-    // If a custom deselect handler has been defined, call it
-    if (this.deselectHandler != null)
-      this.deselectHandler()
-  },
+	deselectAll: function() {
+		this.element.getElements('li.selected').removeClass('selected');
+		this.selectedItems = [];
+		this.fireEvent('deselect');
+	},
 
-  select: function(element, event)
-  {
-
+	select: function(element, event){
     // Multiple Selection (Shift-Select)
-    if (event && event.shiftKey)
-    {
+    if (event && event.shiftKey) {
       // Find first selected item
-      firstSelectedElement      = this.element.down('li.selected')
-      firstSelectedElementIndex = this.items().indexOf(firstSelectedElement)
-      selectedElementIndex      = this.items().indexOf(element)
+      var firstSelectedElement = this.element.getElement('li.selected');
+      var firstSelectedElementIndex = this.items().indexOf(firstSelectedElement);
+      var selectedElementIndex = this.items().indexOf(element);
 
-      // If the first selected element is the element that was clicked on
-      // then there's nothing for us to do.
-      if (firstSelectedElement == element)
-        return
+      if (firstSelectedElement == element) return;
 
       // If no elements are selected already, just select the element that
       // was clicked on.
       if (firstSelectedElementIndex == -1) {
-        window.matrixView.select(element)
-        return
+      	this.select(element);
+        return;
       }
 
-      siblings = null
-      if (firstSelectedElementIndex < selectedElementIndex)
-        siblings = firstSelectedElement.nextSiblings()
-      else
-        siblings = firstSelectedElement.previousSiblings()
-      done = false
-      siblings.each(
-        function(el) {
+      var siblings;
+      if (firstSelectedElementIndex < selectedElementIndex){
+		siblings = firstSelectedElement.nextSiblings();
+      }else{
+        siblings = firstSelectedElement.previousSiblings();
+	}
+      var done = false;
+      siblings.each(function(el) {
           if (done == false) {
-            el.addClassName('selected')
-            window.matrixView.selectedItems.push(el)
+            el.addClassName('selected');
+            this.selectedItems.push(el);
           }
-          if (element == el) done = true
-        }
-      )
+          if (element == el) done = true;
+      });
     }
 
     // Multiple Selection (Meta-Select)
@@ -312,112 +282,78 @@ MatrixView.prototype = {
         this.selectedItems.push(element)
         element.addClassName('selected')
       }
+    }else{
+		this.element.getElements('li.selected').removeClass('selected');
+		this.selectedItems = new Array(element)
+		element.addClassName('selected')
     }
-
-    // Single Selection (Single Click)
-    else
-    {
-      $$('li.selected').invoke('removeClassName', 'selected')
-      this.selectedItems = new Array(element)
-      element.addClassName('selected')
-    }
-
-    // If a custom select handler has been defined, call it
-    if (this.selectHandler != null)
-      this.selectHandler(element)
+	this.fireEvent('select', [element]);
   },
 
-  open: function(element)
-  {
-    this.deselectAll()
-    element.addClassName('selected')
-    // If a custom open handler has been defined, call it
-    if (this.openHandler != null)
-      this.openHandler(element)
-  },
+	open: function(element) {
+		this.deselectAll();
+		element.addClassName('selected');
+		this.fireEvent('open', [element]);
+	},
 
-  destroy: function(elements)
-  {
-    // If a custom open handler has been defined, call it
-    if (this.deleteHandler != null)
-      this.deleteHandler(elements)
-  },
+	destroy: function(elements){
+		this.fireEvent('delete', [elements]);
+	},
 
-  selectAll: function()
-  {
-    this.deselectAll()
-    $$('li').each(
-      function(el) {
-        el.addClassName('selected')
-        window.matrixView.selectedItems.push(el)
-      }
-    )
+	selectAll: function() {
+		this.deselectAll();
+		this.element.getElements('li').each(function(el) {
+			el.addClassName('selected');
+			this.selectedItems.push(el);
+		});
+		this.fireEvent('select', this.selectedItems);
+	},
 
-    // If a custom select handler has been defined, call it
-    if (this.selectHandler != null)
-      this.selectHandler(window.matrixView.selectedItems)
-  },
+	selectFirst: function() {
+		var element = this.element.getFirst('li');
+		this.deselectAll();
+		this.select(element);
+		this.scrollIntoView(element, 'down');
+		this.fireEvent('select', [element]);
+	},
 
-  selectFirst: function()
-  {
+	selectLast: function() {
+		var element = $$('#matrixView li').last();
+		this.deselectAll();
+		this.select(element);
+		this.scrollIntoView(element, 'down');
+		this.fireEvent('select', [element]);
+	},
 
-    element = $$('#matrixView li').first()
+	moveLeft: function(event) {
+   		event.stop();
+		element = $$('li.selected').first()
+		if (!element)
+		return this.selectFirst()
+		if (previousElement = element.previous())
+		{
+		this.select(previousElement)
+		this.scrollIntoView(previousElement, 'up')
+		}
+		else
+		this.selectFirst()
+	},
 
-    this.deselectAll()
-    this.select(element)
+	moveRight: function(event){
+		event.stop();
+		element = $$('li.selected').last();
+		if (!element){
+			return this.selectFirst();
+		}
+		if (nextElement = element.next()){
+			this.select(nextElement);
+			this.scrollIntoView(nextElement, 'down');
+		}else{
+			this.selectLast();
+		}
+	},
 
-    this.scrollIntoView(element, 'down')
-
-    // If a custom select handler has been defined, call it
-    if (this.selectHandler != null)
-      this.selectHandler(element)
-  },
-
-  selectLast: function()
-  {
-    element = $$('#matrixView li').last()
-
-    this.deselectAll()
-    this.select(element)
-
-    this.scrollIntoView(element, 'down')
-
-    // If a custom select handler has been defined, call it
-    if (this.selectHandler != null)
-      this.selectHandler(element)
-  },
-
-  moveLeft: function(event)
-  {
-    event.stop()
-    element = $$('li.selected').first()
-    if (!element)
-      return this.selectFirst()
-    if (previousElement = element.previous())
-    {
-      this.select(previousElement)
-      this.scrollIntoView(previousElement, 'up')
-    }
-    else
-      this.selectFirst()
-  },
-
-  moveRight: function(event)
-  {
-    event.stop()
-    element = $$('li.selected').last()
-    if (!element)
-      return this.selectFirst()    
-    if (nextElement = element.next())
-    {
-      this.select(nextElement)
-      this.scrollIntoView(nextElement, 'down')
-    }
-    else
-      this.selectLast()
-  },
-
-  moveUp: function(event)
+ moveUp: function(event)
   {
     event.stop()
 
@@ -558,28 +494,24 @@ MatrixView.prototype = {
       this.selectHandler(element)
   },
 
-  items: function()
-  {
-    return this.element.getElementsBySelector('li')
-  },
+	items: function() {
+		return this.element.getElements('li');
+	},
+	
+	scrollIntoView: function(element, direction) {
+		scrollingView = this.element;
+		if (direction == 'down' || direction == 'right') {
+			if ((Position.page(element)[1] + element.getHeight()) >= (scrollingView.getHeight() + Position.cumulativeOffset(scrollingView)[1])){
+				scrollingView.scrollTop = (Position.cumulativeOffset(element)[1] - scrollingView.getHeight() + element.getHeight());
+			} else if (Position.page(element)[1] <= 0) {
+				scrollingView.scrollTop = (Position.cumulativeOffset(element)[1] - scrollingView.getHeight() + element.getHeight())
+			} else if (direction == 'up' || direction == 'left') {
+				if ((Position.page(element)[1] + element.getHeight()) >= (scrollingView.getHeight() + Position.cumulativeOffset(scrollingView)[1])){
+					scrollingView.scrollTop = element.getPosition().y - parseInt(element.getStyle('margin-top'))) - 24;
+				} else if (Position.page(element)[1] <= 0) {
+					scrollingView.scrollTop = element.getPosition().y - parseInt(element.getStyle('margin-top'))) - 24;
+				}
+			}
+	}
 
-  scrollIntoView: function(element, direction)
-  {
-    scrollingView = $('matrixView')
-    if (direction == 'down' || direction == 'right')
-    {
-      if ((Position.page(element)[1] + element.getHeight()) >= (scrollingView.getHeight() + Position.cumulativeOffset(scrollingView)[1]))
-        scrollingView.scrollTop = (Position.cumulativeOffset(element)[1] - scrollingView.getHeight() + element.getHeight())
-      else if (Position.page(element)[1] <= 0)
-        scrollingView.scrollTop = (Position.cumulativeOffset(element)[1] - scrollingView.getHeight() + element.getHeight())
-    }
-    else if (direction == 'up' || direction == 'left')
-    {
-      if ((Position.page(element)[1] + element.getHeight()) >= (scrollingView.getHeight() + Position.cumulativeOffset(scrollingView)[1]))
-        scrollingView.scrollTop = (Position.cumulativeOffset(element)[1] - parseInt(element.getStyle('margin-top'))) - 24
-      else if (Position.page(element)[1] <= 0)
-        scrollingView.scrollTop = (Position.cumulativeOffset(element)[1] - parseInt(element.getStyle('margin-top'))) - 24
-    }
-  }
-
-}
+});
