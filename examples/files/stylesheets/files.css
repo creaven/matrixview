@@ -82,7 +82,7 @@ div#infoHeader p {
   margin: 0px;
 }
 
-div#selectionArea {
+.selectionArea {
   background-color: #336699;
   border: 1px solid black;
   opacity: 0.25;

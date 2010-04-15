@@ -95,11 +95,6 @@ var MatrixView = new Class({
 	mousedown: function(event) {
 		event.preventDefault();
 		var element = document.id(event.target);
-		// For Safari, since it passes thru clicks on the scrollbar, exclude 15 pixels from the click area
-		if (Browser.Engine.webkit && this.element.scrollHeight > this.element.offsetHeight && event.page.x > (this.element.offsetWidth + this.element.getPosition().x - 15)) {
-			event.stop();
-			return;
-		};
 		element = element.getAncestor('li');
 		if (element) {
 			this.select(element, event);
@@ -107,9 +102,8 @@ var MatrixView = new Class({
 			this.deselectAll();
 		};
 		this.dragging = true;
-		this.originX = event.page.x;
-		this.originY = event.page.y;
-		this.element.setStyle({
+		this.start = event.page;
+		this.selectionArea.setStyles({
 			width: 0,
 			height: 0,
 			left: event.page.x - this.element.getPosition().x,
@@ -120,7 +114,7 @@ var MatrixView = new Class({
 	mouseup: function(event) {
 		event.stop();
 		this.dragging = false;
-		this.selectionArea.setStyle({
+		this.selectionArea.setStyles({
 			width: 0,
 			height: 0,
 			display: 'none'
@@ -132,103 +126,97 @@ var MatrixView = new Class({
 		if (!this.dragging) return;
 		this.selectionArea.setStyle('display', 'block');
 		var top, left;
-		var width = event.page.x - this.originX;
-		var height = event.page.y - this.originY;
+		var width = event.page.x - this.start.x;
+		var height = event.page.y - this.start.y;
 
 		if (width < 0) {
 			width = -width;
 			left = event.page.x;
 		} else {
-			left = this.originX;
+			left = this.start.x;
 		}
 		if (height < 0) {
 			height = -height;
 			top = event.page.y;
 		} else {
-			top = this.originY;
+			top = this.start.y;
 		}
 		left = left - this.element.getPosition().x;
 		top = top - this.element.getPosition().y;
-
-		this.selectionArea.setStyle({
+		var right = left + width;
+		var bottom = top + height;
+		this.selectionArea.setStyles({
 			left: left,
 			top: top,
 			width: width,
 			height: height
 		});
-
+		function intersect(a, b, flag){
+			var sides = [[0, 1, 0, 3], [0, 1, 2, 1], [0, 3, 2, 3], [2, 1, 2, 3]];
+			for(var i = 0; i < 4; i++){
+				var side = sides[i];
+				var x1 = a[side[0]];
+				var y1 = a[side[1]];
+				var x2 = a[side[2]];
+				var y2 = a[side[3]];
+				var left = b[0];
+				var top = b[1];
+				var right = b[2];
+				var bottom = b[3];
+				if( left <= x1 && x1 <= right && top <= y1 && y1 <= bottom ) return true;
+				if( left <= x2 && x2 <= right && top <= y2 && y2 <= bottom ) return true;
+				if( x1 <= left && x2 >= left && top <= y2 && y2 <= bottom) return true;
+				if( y1 <= top && y2 >= top && left <= x2 && x2 <= right) return true;
+			}
+			if(flag) return false;
+			return intersect(b, a, true);
+		}
 		this.element.getElements('li').each(function(element) {
 			var coords = element.getCoordinates();
-			var left = coords.left;
-			var top = coords.top;
-			var right = coords.right;
-			var bottom = coords.bottom;
-			if (
-			Position.within($('selectionArea'), left, top) || Position.within($('selectionArea'), right, top) || Position.within($('selectionArea'), left, bottom) || Position.within($('selectionArea'), right, bottom)) {
+			if (intersect([left, top, right, bottom], [coords.left, coords.top, coords.right, coords.bottom])){
 				element.addClass('selected');
-				if (window.matrixView.selectedItems.indexOf(element) == -1) {
-					this.selectedItems.push(element);
-				}
+				this.selectedItems.include(element);
 			} else {
-				this.selectedItems[this.selectedItems.indexOf(element)] = null;
+				this.selectedItems.erase(element);
 				element.removeClass('selected');
 			}
-		});
-	},
-
-	deselectAll: function() {
-		this.element.getElements('li.selected').removeClass('selected');
-		this.selectedItems = [];
-		this.fireEvent('deselect');
+		}, this);
 	},
 
 	select: function(element, event) {
-		// Multiple Selection (Shift-Select)
-		if (event && event.shiftKey) {
+		if (event && event.shift) {
 			// Find first selected item
-			var firstSelectedElement = this.element.getElement('li.selected');
-			var firstSelectedElementIndex = this.items().indexOf(firstSelectedElement);
-			var selectedElementIndex = this.items().indexOf(element);
-
-			if (firstSelectedElement == element) return;
-
-			// If no elements are selected already, just select the element that
-			// was clicked on.
-			if (firstSelectedElementIndex == -1) {
+			var items = this.getItems();
+			var first = this.element.getElement('li.selected');
+			if (first == element) return;
+			first = items.indexOf(first);
+			var current = items.indexOf(element);
+			if (first == -1) {
 				this.select(element);
 				return;
+			};
+			var start, end;
+			if(first < current){
+				start = first;
+				end = current + 1;
+			}else{
+				start = current;
+				end = first;
 			}
-
-			var siblings;
-			if (firstSelectedElementIndex < selectedElementIndex) {
-				siblings = firstSelectedElement.nextSiblings();
-			} else {
-				siblings = firstSelectedElement.previousSiblings();
+			for(var i = start; i < end; i++){
+				items[i].addClass('selected');
+				this.selectedItems.push(items[i]);
 			}
-			var done = false;
-			siblings.each(function(el) {
-				if (done == false) {
-					el.addClassName('selected');
-					this.selectedItems.push(el);
-				}
-				if (element == el) done = true;
-			});
-		}
-
-		// Multiple Selection (Meta-Select)
-		else if (event && event.metaKey) {
-			// If the element is already selected, deselect it
-			if (element.hasClassName('selected')) {
-				this.selectedItems[this.selectedItems.indexOf(element)] = null;
+		} else if (event && event.meta) {
+			if (element.hasClass('selected')) {
+				this.selectedItems.erase(element);
 				element.removeClass('selected');
-			}
-
-			// Otherwise, select it
-			else {
+			} else {
 				this.selectedItems.push(element);
 				element.addClass('selected');
 			}
 		} else {
+			if(element.hasClass('selected')) return;
 			this.element.getElements('li.selected').removeClass('selected');
 			this.selectedItems = [element];
 			element.addClass('selected');
@@ -238,7 +226,7 @@ var MatrixView = new Class({
 
 	open: function(element) {
 		this.deselectAll();
-		element.addClassName('selected');
+		element.addClass('selected');
 		this.fireEvent('open', [element]);
 	},
 
@@ -254,6 +242,12 @@ var MatrixView = new Class({
 		});
 		this.fireEvent('select', this.selectedItems);
 	},
+	
+	deselectAll: function() {
+		this.element.getElements('li.selected').removeClass('selected');
+		this.selectedItems = [];
+		this.fireEvent('deselect');
+	},
 
 	selectFirst: function() {
 		var element = this.element.getFirst('li');
@@ -264,7 +258,7 @@ var MatrixView = new Class({
 	},
 
 	selectLast: function() {
-		var element = $$('#matrixView li').last();
+		var element = this.element.getElement('li:list-child');
 		this.deselectAll();
 		this.select(element);
 		this.scrollIntoView(element, 'down');
@@ -395,8 +389,8 @@ var MatrixView = new Class({
 		this.fireEvent('select', [element]);
 	},
 
-	items: function() {
-		return this.element.getChildren('li');
+	getItems: function() {
+		return this.element.getElements('li');
 	},
 
 	scrollIntoView: function(element, direction) {
