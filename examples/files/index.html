@@ -37,12 +37,8 @@
 						alert('You can define a custom JavaScript function to be called when the user tries to delete an item from your list by defining the deleteHandler callback.')
 					}
 				});
-				totalItems = window.matrixView.element.getElements('li').length;
-				if (totalItems > 1) {
-					$('statusBar').update(totalItems + ' Files')
-				} else {
-					$('statusBar').update(totalItems + ' File')
-				}
+				var totalItems = matrixView.items().length;
+				document.id('statusBar').set('html', totalItems + ' File' + (totalItems > 1 ? 's' : ''));
 			});
 		</script>
 	</head>
