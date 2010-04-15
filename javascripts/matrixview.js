@@ -53,179 +53,141 @@ var MatrixView = new Class({
 				window.matrixView.selectAll();
 				event.stop();
 				return false;
-			};
+			} else if (event.shift) {
+				var directions = ['left', 'right', 'top', 'bottom'];
+				if(['left', 'right', 'top', 'bottom'].contains(event.key)){
+					this['expandSelection' + event.key.capitalize()](event);
+				}
+				if(event.key == 'space'){
+					event.stop();
+				}
+				if(event.key == 'tab' && this.selectedItems.length){
+					this.moveLeft(event);
+				}
+          		return;
+        	}
 
-        // Shift
-        else if (event.shiftKey)
-        {
-          if (event.keyCode == Event.KEY_LEFT || event.keyCode == 63234) // Left Arrow
-            window.matrixView.expandSelectionLeft(event)
-          if (event.keyCode == Event.KEY_UP || event.keyCode == 63232) // Up Arrow
-            window.matrixView.expandSelectionUp(event)
-          if (event.keyCode == Event.KEY_RIGHT || event.keyCode == 63235) // Right Arrow
-            window.matrixView.expandSelectionRight(event)
-          if (event.keyCode == Event.KEY_DOWN || event.keyCode == 63233) // Down Arrow
-            window.matrixView.expandSelectionDown(event)
-          if (event.keyCode == 32) // Space
-            event.stop()
-          if (event.keyCode == Event.KEY_TAB) // Tab
-          {
-            if (window.matrixView.selectedItems.size() > 0)
-              window.matrixView.moveLeft(event)
-          }
-          return
-        }
+			if (event.key == 'enter') {
+				if (this.selectedItems.length == 1)
+				this.open(this.selectedItems[0]);
+			}
+			if (['delete', 'backspace'].contains(event.key)) {
+				this.destroy(this.selectedItems);
+				event.stop();
+			}
+			if(['left', 'right', 'down', 'up'].contains(event.key)){
+				this['move' + event.key.capitalize()](event);
+			}
+			if(event.key == 'space'){
+				event.stop();
+			}
+			if(event.key == 'tab' && this.selectedItems.length){
+				this.moveRigth(event);
+			}
+		});
 
-        if (event.keyCode == Event.KEY_RETURN) // Enter (Open Item)
-        {
-          if (window.matrixView.selectedItems.size() == 1)
-            window.matrixView.open(window.matrixView.selectedItems.first())
-        }
-        if (event.keyCode == Event.KEY_BACKSPACE || event.keyCode == Event.KEY_DELETE || event.keyCode == 63272) // Delete/Backspace
-        {
-          window.matrixView.destroy(window.matrixView.selectedItems)
-          event.stop()
-        }
-        if (event.keyCode == Event.KEY_LEFT || event.keyCode == 63234) // Left Arrow
-          window.matrixView.moveLeft(event)
-        if (event.keyCode == Event.KEY_UP || event.keyCode == 63232) // Up Arrow
-          window.matrixView.moveUp(event)
-        if (event.keyCode == Event.KEY_RIGHT || event.keyCode == 63235) // Right Arrow
-          window.matrixView.moveRight(event)
-        if (event.keyCode == Event.KEY_DOWN || event.keyCode == 63233) // Down Arrow
-          window.matrixView.moveDown(event)
-        if (event.keyCode == 32) // Space
-          event.stop()
-        if (event.keyCode == Event.KEY_TAB) // Tab
-        {
-          if (window.matrixView.selectedItems.size() > 0)
-            window.matrixView.moveRight(event)
-        }
-      }
-    );
+		this.element.addEvent('dblclick', function(event) {
+			event.preventDefault();
+			var target = document.id(event.target);
+			var element = target.getAncestor('li');
+			if (element) {
+				this.deselectAll();
+				this.open(element);
+			}
+		}.bind(this));
 
-	this.element.addEvent('dblclick', function(event) {
-		event.preventDefault();
-		var target = document.id(event.target);
-		var element = target.getAncestor('li');
-		if (element) {
-			this.deselectAll();
-			this.open(element);
-		}
-	}.bind(this));
+	    element.addEvent('mousedown', function(event) {
+			event.preventDefault();
+			var element = document.id(event.target);
+			// For Safari, since it passes thru clicks on the scrollbar, exclude 15 pixels from the click area
+			if (Browser.Engine.webkit) {
+				if (window.matrixView.element.scrollHeight > window.matrixView.element.getHeight()) {
+					if (Event.pointerX(event) > (window.matrixView.element.getWidth() + Position.cumulativeOffset(window.matrixView.element)[0] - 15)) {
+						event.stop();
+						return;
+					}
+				}
+			}
+			element = element.getAncestor('li');
+			if (element) {
+				this.select(element, event);
+			} else {
+				this.deselectAll();
+			}
+			this.dragging = true;
+			this.originX = event.page.x;
+			this.originY = event.page.y;
+			this.element.setStyle({
+				width:0, 
+				height: 0,
+				left:event.pointerX() - window.matrixView.element.cumulativeOffset()[0],
+				top:event.pointerY() - window.matrixView.element.cumulativeOffset()[1]
+			});
+		}.bind(this));
 
-    // Click / Mouse Down
-    Event.observe(element, 'mousedown',
-      function(event) {
-        element = Event.element(event)
+		element.addEvent('mouseup', function(event) {
+			event.stop();
+			this.dragging = false
+			this.selectionArea.setStyle({
+				width: 0, 
+				height: 0,
+				display: 'none'
+			});
+			this.fireEvent('select', this.selectedItems);
+		}.bind(this));
 
-        // For Safari, since it passes thru clicks on the scrollbar, exclude 15 pixels from the click area
-        if (Prototype.Browser.WebKit) {
-          if (window.matrixView.element.scrollHeight > window.matrixView.element.getHeight()) {
-            if (Event.pointerX(event) > (window.matrixView.element.getWidth() + Position.cumulativeOffset(window.matrixView.element)[0] - 15)) {
-              event.stop()
-              return
-            }
-          }
-        }
+		element.addEvent('mousemove', function(event) {
+			if(!this.dragging) return;
+			this.selectionArea.setStyle('display', 'block');
+			var top, left;
+			var width  = event.page.x - this.originX;
+			var height = event.page.y - this.originY;
 
-        if (element.tagName != 'LI') element = element.up('li')
-        if (element)
-          window.matrixView.select(element, event)
-        else
-          window.matrixView.deselectAll()
+			if (width < 0){
+				width = -width;
+				left = event.page.x;
+			} else {
+				left = this.originX;
+			}
+			if (height < 0){
+				height = -height;
+				top = event.page.y;
+			}else{
+				top = this.originY;
+			}
+			left = left - window.matrixView.element.cumulativeOffset()[0];
+			top  = top  - window.matrixView.element.cumulativeOffset()[1];
 
-        window.dragging = true
-        window.originX = event.pointerX()
-        window.originY = event.pointerY()
-        $('selectionArea').setStyle({ width:'0px', height:'0px', left:event.pointerX() - window.matrixView.element.cumulativeOffset()[0], top:event.pointerY() - window.matrixView.element.cumulativeOffset()[1] })
+			this.selectionArea.setStyle({
+				left: left,
+				top: top,
+				width: width,
+				height: height
+			});
 
-        event.preventDefault()
-      }
-    )
-
-    Event.observe(element, 'mouseup',
-      function(event) {
-        window.dragging = false
-        $('selectionArea').hide()
-        $('selectionArea').setStyle({ width:'0px', height:'0px' })
-        event.stop()
-        if (window.matrixView.selectHandler != null)
-          window.matrixView.selectHandler(window.matrixView.selectedItems)
-      }
-    )
-
-    Event.observe(element, 'mousemove',
-      function(event) {
-        if (window.dragging)
-        {
-          if (!$('selectionArea').visible()) $('selectionArea').show()
-
-          var top, left
-          var width  = event.pointerX() - window.originX
-          var height = event.pointerY() - window.originY
-
-          if (width < 0)
-          {
-            width = -width
-            left = event.pointerX()
-          }
-          else
-          {
-            left = window.originX
-          }
-
-          if (height < 0)
-          {
-            height = -height
-            top = event.pointerY()
-          }
-          else
-          {
-            top = window.originY
-          }
-
-          left = left - window.matrixView.element.cumulativeOffset()[0]
-          top  = top  - window.matrixView.element.cumulativeOffset()[1]
-
-          $('selectionArea').setStyle({
-            left: left + 'px',
-            top: top + 'px',
-            width: width + 'px',
-            height: height + 'px'
-          })
-
-          window.matrixView.element.getElementsBySelector('li').each(
-            function(element)
-            {
-              offset = element.cumulativeOffset()
-              dimensions = element.getDimensions()
-              left = offset.left
-              top = offset.top
-              right = left + dimensions.width
-              bottom = top + dimensions.height
-              if (Position.within($('selectionArea'), left, top) ||
-                  Position.within($('selectionArea'), right, top) ||
-                  Position.within($('selectionArea'), left, bottom) ||
-                  Position.within($('selectionArea'), right, bottom))
-              {
-                element.addClassName('selected')
-                if (window.matrixView.selectedItems.indexOf(element) == -1)
-                  window.matrixView.selectedItems.push(element)
-              }
-              else
-              {
-                window.matrixView.selectedItems[window.matrixView.selectedItems.indexOf(element)] = null
-                element.removeClassName('selected')
-              }
-            }
-          )
-
-        }
-      }
-    )
-
-  },
+			this.element.getElements('li').each(function(element){
+				var coords = element.getCoordinates();
+				var left = coords.left;
+				var top = coords.top;
+				var right = coords.right;
+				var bottom = coords.bottom;
+				if (
+					Position.within($('selectionArea'), left, top) ||
+					Position.within($('selectionArea'), right, top) ||
+					Position.within($('selectionArea'), left, bottom) ||
+					Position.within($('selectionArea'), right, bottom)
+				){
+					element.addClass('selected');
+					if (window.matrixView.selectedItems.indexOf(element) == -1){
+						this.selectedItems.push(element);
+					}
+				} else {
+					this.selectedItems[this.selectedItems.indexOf(element)] = null
+					element.removeClass('selected');
+				}
+			});
+		});
+	},
 
 	deselectAll: function() {
 		this.element.getElements('li.selected').removeClass('selected');
@@ -341,158 +303,111 @@ var MatrixView = new Class({
 
 	moveRight: function(event){
 		event.stop();
-		element = $$('li.selected').last();
+		var element = this.element.getElement('li.selected:last-child');
 		if (!element){
 			return this.selectFirst();
 		}
-		if (nextElement = element.next()){
-			this.select(nextElement);
-			this.scrollIntoView(nextElement, 'down');
+		var next = element.getNext();
+		if (next) {
+			this.select(next);
+			this.scrollIntoView(next, 'down');
 		}else{
 			this.selectLast();
 		}
 	},
 
- moveUp: function(event)
-  {
-    event.stop()
+	moveUp: function(event){
+		event.stop()
+		var element = this.element.getElement('li.selected');
+		if (!element) return this.selectFirst();
+		var offset = element.getPosition();
+		var y = Math.floor(offset.y - element.offsetHeight);
 
-    element = $$('li.selected').first()
-    if (!element) return this.selectFirst()
+		var previous = element.getAllPrevious();
+		if (!previous.length) return this.selectFirst();
 
-    offset = Position.cumulativeOffset(element)
-    y = Math.floor(offset[1] - element.getHeight())
+		previous.each(function(el) {
+			if (Position.within(el, offset.x, y)){
+				this.select(el)	
+				this.scrollIntoView(el, 'up')
+			}
+		});
 
-    previousSiblings = element.previousSiblings()
-    if (previousSiblings.size() == 0) return this.selectFirst()
+	},
 
-    previousSiblings.each(
-      function(el) {
-        if (Position.within(el, offset[0], y))
-        {
-          window.matrixView.select(el)
-          window.matrixView.scrollIntoView(el, 'up')
-        }
-      }
-    )
+	moveDown: function(event){
+		event.stop()
+		var element = this.element.getElement('li.selected:last-child');
+		if (!element) return this.selectFirst();
+		var offset = element.getPosition();
+		var y = Math.floor(offset.y + element.offsetHeight + (element.offsetHeight / 2)) + parseInt(element.getStyle('margin-bottom'))
 
-  },
+		var next = element.getAllNext();
+		if (!next) return this.selectLast();
+		var selected = false;
+		next.each(function(el) {
+			if (Position.within(el, offset[0], y)){
+				this.select(el);
+				this.scrollIntoView(el, 'down');
+				selected = true;
+			}
+		});
+		if (!selected) this.selectLast();
+	},
 
-  moveDown: function(event)
-  {
-    event.stop()
+	expandSelectionLeft: function(event){
+		var element = this.element.getElement('li.selected');
+		var otherElement = element.getPrevious().addClass('selected');
+		this.selectedItems.push(otherElement);
+		this.scrollIntoView(element, 'up');
+		this.fireEvent('select', [element]);
+	},
 
-    element = this.element.getElementsBySelector('li.selected').last()
-    if (!element) return this.selectFirst()
+	expandSelectionRight: function(event){
+		var element = this.element.getElement('li.selected');
+		var otherElement = element.getNext().addClass('selected');
+		this.selectedItems.push(otherElement);
+		this.scrollIntoView(element, 'down');
+		this.fireEvent('select', [element]);
+	},
 
-    offset = Position.cumulativeOffset(element)
-    y = Math.floor(offset[1] + element.getHeight() + (element.getHeight() / 2)) + parseInt($(element).getStyle('margin-bottom'))
+	expandSelectionUp: function(event) {
+		event.stop();
+		var element = this.element.down('li.selected');
+		var itemWidth = element.getWidth();
+		var itemOffset = Position.cumulativeOffset(element);
+		var done = false;
+		element.getAllPrevious().each(function(el){
+			if (done == false){
+				el.addClass('selected');
+				this.selectedItems.push(el);
+			}
+			if (Position.within(el, itemOffset.x, itemOffset.y - element.offsetHeight)){
+				done = true;
+				this.scrollIntoView(el, 'up');
+			}
+		});
+		this.fireEvent('select', [element]);
+	},
 
-    nextSiblings = element.nextSiblings()
-    if (nextSiblings.size() == 0) return this.selectLast()
-
-    selected = false
-
-    nextSiblings.each(
-      function(el) {
-        if (Position.within(el, offset[0], y))
-        {
-          window.matrixView.select(el)
-          window.matrixView.scrollIntoView(el, 'down')
-          selected = true
-        }
-      }
-    )
-
-    if (!selected) this.selectLast()
-
-  },
-
-  expandSelectionLeft: function(event)
-  {
-    element = this.element.down('li.selected')
-    otherElement = element.previous()
-    otherElement.addClassName('selected')
-    this.selectedItems.push(otherElement)
-
-    window.matrixView.scrollIntoView(element, 'up')
-
-    // If a custom select handler has been defined, call it
-    if (this.selectHandler != null)
-      this.selectHandler(element)
-  },
-
-  expandSelectionRight: function(event)
-  {
-    element = this.element.getElementsBySelector('li.selected').last()
-    otherElement = element.next()
-    otherElement.addClassName('selected')
-    this.selectedItems.push(otherElement)
-
-    window.matrixView.scrollIntoView(element, 'down')
-
-    // If a custom select handler has been defined, call it
-    if (this.selectHandler != null)
-      this.selectHandler(element)
-  },
-
-  expandSelectionUp: function(event)
-  {
-    event.stop()
-    element        = this.element.down('li.selected')
-    itemWidth      = element.getWidth()
-    itemOffset     = Position.cumulativeOffset(element)
-    done = false
-    element.previousSiblings().each(
-      function(el)
-      {
-        if (done == false)
-        {
-          el.addClassName('selected')
-          window.matrixView.selectedItems.push(el)
-        }
-        if (Position.within(el, itemOffset[0], itemOffset[1] - element.getHeight()))
-        {
-          done = true
-          window.matrixView.scrollIntoView(el, 'up')
-        }
-      }
-    )
-
-    // If a custom select handler has been defined, call it
-    if (this.selectHandler != null)
-      this.selectHandler(element)
-  },
-
-  expandSelectionDown: function(event)
-  {
-    event.stop()
-    element = this.element.getElementsBySelector('li.selected').last()
-
-    offset = Position.cumulativeOffset(element)
-    y = Math.floor(offset[1] + element.getHeight() + (element.getHeight() / 2)) + parseInt($(element).getStyle('margin-bottom'))
-
-    done = false
-    element.nextSiblings().each(
-      function(el)
-      {
-        if (done == false)
-        {
-          el.addClassName('selected')
-          window.matrixView.selectedItems.push(el)
-        }
-        if (Position.within(el, offset[0], y))
-        {
-          done = true
-          window.matrixView.scrollIntoView(el, 'down')
-        }
-      }
-    )
- 
-    // If a custom select handler has been defined, call it
-    if (this.selectHandler != null)
-      this.selectHandler(element)
-  },
+	expandSelectionDown: function(event){
+		event.stop();
+		var element = this.element.getElement('li.selected:last-child');
+		var offset = element.getPosition();
+		var y = Math.floor(offset.y + element.offsetHeight + (element.offsetHeight / 2)) + parseInt(element.getStyle('margin-bottom'));
+		var done = false;
+		element.getAllNext.each(function(el) {
+			if (done == false) {
+				el.addClass('selected');
+				this.selectedItems.push(el);
+			}
+			if (Position.within(el, offset.x, y)) {
+				done = true;
+				this.scrollIntoView(el, 'down');
+			}
+		});
+		this.fireEvent('select', [element]);
+	},
 
 	items: function() {
 		return this.element.getElements('li');
