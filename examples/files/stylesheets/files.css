@@ -86,6 +86,8 @@ div#infoHeader p {
   background-color: #336699;
   border: 1px solid black;
   opacity: 0.25;
+  filter: alpha(opacity=25);
+  -ms-filter:"progid:DXImageTransform.Microsoft.Alpha(Opacity=25)";
   height: 0px;
   width: 0px;
   top: 0px;
