@@ -164,7 +164,7 @@ var MatrixView = new Class({
 			var right = Math.min(a.right, b.right);
 			var top = Math.max(a.top, b.top);
 			var bottom = Math.min(a.bottom, b.bottom);
-			return left <= right && top <= bottom ? true : false;
+			return left <= right && top <= bottom;
 		};
 		this.element.getElements('li').each(function(element) {
 			var coords = element.getCoordinates();
